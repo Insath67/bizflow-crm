@@ -38,6 +38,7 @@ The system includes a premium responsive user interface, JWT-based authenticatio
 ### 10. Payment Management
 ![Payment Management](screenshots/10-payments-page.png)
 
+---
 
 ## Features
 
@@ -47,6 +48,7 @@ The system includes a premium responsive user interface, JWT-based authenticatio
 - Confirm password validation
 - Forgot password page UI
 - JWT protected dashboard routes
+- Clean public landing page before login
 
 ### Dashboard
 - Business overview dashboard
@@ -153,4 +155,17 @@ BizFlow-CRM/
 │   │   └── index.css
 │   └── package.json
 │
+├── screenshots/
+│   ├── 01-home-page.png
+│   ├── 02-login-page.png
+│   ├── 03-dashboard.png
+│   ├── 04-customers-page.png
+│   ├── 05-items-page.png
+│   ├── 06-quotations-page.png
+│   ├── 07-quotation-pdf.png
+│   ├── 08-invoices-page.png
+│   ├── 09-invoice-pdf.png
+│   └── 10-payments-page.png
+│
+├── .gitignore
 └── README.md
