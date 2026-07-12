@@ -1,163 +1,397 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import API from "../api/axios";
 
-export const generateQuotationPDF = (quotation) => {
-  const doc = new jsPDF();
+const getSafe = (value, fallback = "") => {
+  if (value === null || value === undefined || value === "") return fallback;
+  return value;
+};
 
-  const formatMoney = (amount) => {
-    return `Rs. ${Number(amount || 0).toLocaleString()}`;
-  };
+const getMoney = (value) => {
+  const numberValue = Number(value || 0);
+  return numberValue.toLocaleString("en-LK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
 
-  const formatDate = (date) => {
-    if (!date) return "-";
-    return new Date(date).toLocaleDateString();
-  };
+const getDate = (value) => {
+  if (!value) return "N/A";
 
-  const quotationNumber = quotation.quotationNumber || "QUO-00000";
-  const customer = quotation.customer || {};
+  return new Date(value).toLocaleDateString("en-LK", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
 
-  const calculatedSubtotal =
-    quotation.items?.reduce((sum, item) => {
-      return sum + Number(item.quantity || 0) * Number(item.price || 0);
-    }, 0) || 0;
+const getCompanySettings = async () => {
+  try {
+    const res = await API.get("/company");
 
-  const subtotal = Number(quotation.subtotal ?? calculatedSubtotal);
-  const discount = Number(quotation.discount || 0);
-  const tax = Number(quotation.tax || 0);
-  const grandTotal = Number(
-    quotation.grandTotal || subtotal - discount + tax
+    return {
+      businessName: res.data.data.businessName || "BizFlow CRM",
+      businessEmail: res.data.data.businessEmail || "support@bizflowcrm.com",
+      phone: res.data.data.phone || "",
+      address: res.data.data.address || "",
+      website: res.data.data.website || "",
+      taxNumber: res.data.data.taxNumber || "",
+      currency: res.data.data.currency || "LKR",
+    };
+  } catch (error) {
+    console.error("Failed to load company settings for PDF:", error);
+
+    return {
+      businessName: "BizFlow CRM",
+      businessEmail: "support@bizflowcrm.com",
+      phone: "",
+      address: "",
+      website: "",
+      taxNumber: "",
+      currency: "LKR",
+    };
+  }
+};
+
+const getCustomerName = (quotation) => {
+  return (
+    quotation?.customer?.name ||
+    quotation?.customerName ||
+    quotation?.clientName ||
+    quotation?.name ||
+    "Customer"
   );
+};
 
+const getCustomerEmail = (quotation) => {
+  return quotation?.customer?.email || quotation?.customerEmail || "";
+};
+
+const getCustomerPhone = (quotation) => {
+  return quotation?.customer?.phone || quotation?.customerPhone || "";
+};
+
+const getCustomerAddress = (quotation) => {
+  return quotation?.customer?.address || quotation?.customerAddress || "";
+};
+
+const getQuotationNumber = (quotation) => {
+  return (
+    quotation?.quotationNumber ||
+    quotation?.quotationNo ||
+    quotation?.quoteNumber ||
+    quotation?.number ||
+    quotation?._id?.slice(-6)?.toUpperCase() ||
+    "QUO-0001"
+  );
+};
+
+const getQuotationItems = (quotation) => {
+  if (Array.isArray(quotation?.items) && quotation.items.length > 0) {
+    return quotation.items;
+  }
+
+  if (Array.isArray(quotation?.lineItems) && quotation.lineItems.length > 0) {
+    return quotation.lineItems;
+  }
+
+  if (quotation?.item) {
+    return [quotation.item];
+  }
+
+  return [];
+};
+
+const getItemName = (item) => {
+  return (
+    item?.item?.name ||
+    item?.product?.name ||
+    item?.service?.name ||
+    item?.name ||
+    item?.title ||
+    item?.description ||
+    "Item"
+  );
+};
+
+const getItemDescription = (item) => {
+  return item?.description || item?.item?.description || "";
+};
+
+const getItemQuantity = (item) => {
+  return Number(item?.quantity || item?.qty || 1);
+};
+
+const getItemPrice = (item) => {
+  return Number(
+    item?.price ||
+      item?.unitPrice ||
+      item?.rate ||
+      item?.item?.price ||
+      item?.amount ||
+      0
+  );
+};
+
+const calculateSubtotal = (items) => {
+  return items.reduce((sum, item) => {
+    const quantity = getItemQuantity(item);
+    const price = getItemPrice(item);
+    return sum + quantity * price;
+  }, 0);
+};
+
+const drawCompanyHeader = (doc, company) => {
   doc.setFillColor(15, 23, 42);
   doc.rect(0, 0, 210, 42, "F");
 
+  doc.setFillColor(16, 185, 129);
+  doc.roundedRect(14, 11, 18, 18, 4, 4, "F");
+
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(24);
+  doc.setFontSize(20);
   doc.setFont("helvetica", "bold");
-  doc.text("BizFlow CRM", 14, 18);
+  doc.text(company.businessName || "BizFlow CRM", 38, 18);
 
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
-  doc.text("Business Management Suite", 14, 26);
+  doc.setTextColor(203, 213, 225);
 
-  doc.setFontSize(22);
+  const details = [
+    company.businessEmail,
+    company.phone,
+    company.website,
+    company.taxNumber ? `Tax/VAT: ${company.taxNumber}` : "",
+  ].filter(Boolean);
+
+  if (details.length > 0) {
+    doc.text(details.join("  |  "), 38, 25);
+  }
+
+  if (company.address) {
+    const addressLines = doc.splitTextToSize(company.address, 115);
+    doc.text(addressLines, 38, 31);
+  }
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(21);
   doc.setFont("helvetica", "bold");
-  doc.text("QUOTATION", 150, 18);
+  doc.text("QUOTATION", 196, 20, { align: "right" });
 
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
-  doc.text(quotationNumber, 150, 26);
+  doc.setTextColor(203, 213, 225);
+  doc.text("Generated by BizFlow CRM", 196, 28, { align: "right" });
+};
+
+const drawFooter = (doc, company) => {
+  const pageHeight = doc.internal.pageSize.height;
+
+  doc.setDrawColor(226, 232, 240);
+  doc.line(14, pageHeight - 22, 196, pageHeight - 22);
+
+  doc.setTextColor(100, 116, 139);
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+
+  doc.text(
+    `This quotation was prepared by ${company.businessName || "our company"}.`,
+    14,
+    pageHeight - 14
+  );
+
+  doc.text("Powered by BizFlow CRM", 196, pageHeight - 14, {
+    align: "right",
+  });
+};
+
+const createQuotationPdf = async (quotation) => {
+  const company = await getCompanySettings();
+
+  const doc = new jsPDF("p", "mm", "a4");
+
+  drawCompanyHeader(doc, company);
+
+  const quotationNumber = getQuotationNumber(quotation);
+  const quotationDate = getDate(
+    quotation?.quotationDate || quotation?.date || quotation?.createdAt
+  );
+  const validUntil = getDate(quotation?.validUntil || quotation?.expiryDate);
 
   doc.setTextColor(15, 23, 42);
 
-  doc.setFontSize(12);
+  doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
-  doc.text("Quotation For", 14, 55);
+  doc.text("Prepared For", 14, 58);
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text(customer.name || "Unknown Customer", 14, 63);
-  doc.text(customer.company || "-", 14, 70);
-  doc.text(customer.email || "-", 14, 77);
-  doc.text(customer.phone || "-", 14, 84);
+  doc.setTextColor(71, 85, 105);
 
-  doc.setFontSize(12);
+  doc.text(getCustomerName(quotation), 14, 66);
+
+  const customerLines = [
+    getCustomerEmail(quotation),
+    getCustomerPhone(quotation),
+    getCustomerAddress(quotation),
+  ].filter(Boolean);
+
+  let customerY = 72;
+  customerLines.forEach((line) => {
+    const splitLines = doc.splitTextToSize(line, 85);
+    doc.text(splitLines, 14, customerY);
+    customerY += splitLines.length * 5;
+  });
+
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
-  doc.text("Quotation Details", 140, 55);
+  doc.text("Quotation Details", 196, 58, { align: "right" });
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text(`Quotation No: ${quotationNumber}`, 140, 63);
-  doc.text(`Valid Until: ${formatDate(quotation.validUntil)}`, 140, 70);
-  doc.text(`Status: ${quotation.status || "draft"}`, 140, 77);
+  doc.setTextColor(71, 85, 105);
 
-  const tableRows =
-    quotation.items?.map((item, index) => {
-      const quantity = Number(item.quantity || 0);
-      const price = Number(item.price || 0);
-      const lineTotal = quantity * price;
+  doc.text(`Quotation No: ${quotationNumber}`, 196, 66, { align: "right" });
+  doc.text(`Quotation Date: ${quotationDate}`, 196, 72, { align: "right" });
+  doc.text(`Valid Until: ${validUntil}`, 196, 78, { align: "right" });
+  doc.text(`Status: ${getSafe(quotation?.status, "Draft")}`, 196, 84, {
+    align: "right",
+  });
 
-      return [
-        index + 1,
-        item.name || "-",
-        item.description || "-",
-        quantity,
-        formatMoney(price),
-        formatMoney(lineTotal),
-      ];
-    }) || [];
+  const items = getQuotationItems(quotation);
+
+  const tableBody =
+    items.length > 0
+      ? items.map((item, index) => {
+          const quantity = getItemQuantity(item);
+          const price = getItemPrice(item);
+          const total = quantity * price;
+
+          return [
+            index + 1,
+            `${getItemName(item)}${
+              getItemDescription(item) ? `\n${getItemDescription(item)}` : ""
+            }`,
+            quantity,
+            `${company.currency} ${getMoney(price)}`,
+            `${company.currency} ${getMoney(total)}`,
+          ];
+        })
+      : [
+          [
+            1,
+            getSafe(quotation?.description, "Quotation service/item"),
+            1,
+            `${company.currency} ${getMoney(
+              quotation?.amount || quotation?.total
+            )}`,
+            `${company.currency} ${getMoney(
+              quotation?.amount || quotation?.total
+            )}`,
+          ],
+        ];
 
   autoTable(doc, {
-    startY: 98,
-    head: [["#", "Item", "Description", "Qty", "Price", "Total"]],
-    body: tableRows,
+    startY: 100,
+    head: [["#", "Item / Description", "Qty", "Unit Price", "Total"]],
+    body: tableBody,
     theme: "grid",
     headStyles: {
       fillColor: [15, 23, 42],
       textColor: [255, 255, 255],
       fontStyle: "bold",
+      halign: "center",
     },
-    styles: {
+    bodyStyles: {
+      textColor: [51, 65, 85],
       fontSize: 9,
+      cellPadding: 4,
+    },
+    columnStyles: {
+      0: { halign: "center", cellWidth: 12 },
+      1: { cellWidth: 78 },
+      2: { halign: "center", cellWidth: 18 },
+      3: { halign: "right", cellWidth: 35 },
+      4: { halign: "right", cellWidth: 35 },
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252],
+    },
+  });
+
+  const subtotal =
+    Number(quotation?.subtotal) ||
+    calculateSubtotal(items) ||
+    Number(quotation?.amount || quotation?.total || 0);
+
+  const discount = Number(quotation?.discount || 0);
+  const tax = Number(quotation?.tax || quotation?.taxAmount || 0);
+  const total =
+    Number(quotation?.total) ||
+    Number(quotation?.totalAmount) ||
+    subtotal - discount + tax;
+
+  const finalY = doc.lastAutoTable.finalY + 12;
+
+  autoTable(doc, {
+    startY: finalY,
+    margin: { left: 118 },
+    body: [
+      ["Subtotal", `${company.currency} ${getMoney(subtotal)}`],
+      ["Discount", `${company.currency} ${getMoney(discount)}`],
+      ["Tax", `${company.currency} ${getMoney(tax)}`],
+      ["Grand Total", `${company.currency} ${getMoney(total)}`],
+    ],
+    theme: "plain",
+    styles: {
+      fontSize: 10,
       cellPadding: 3,
     },
     columnStyles: {
-      0: { cellWidth: 12 },
-      1: { cellWidth: 38 },
-      2: { cellWidth: 55 },
-      3: { cellWidth: 18, halign: "center" },
-      4: { cellWidth: 32, halign: "right" },
-      5: { cellWidth: 32, halign: "right" },
+      0: {
+        fontStyle: "bold",
+        textColor: [15, 23, 42],
+      },
+      1: {
+        halign: "right",
+        textColor: [15, 23, 42],
+      },
+    },
+    didParseCell: (data) => {
+      if (data.row.index === 3) {
+        data.cell.styles.fontStyle = "bold";
+        data.cell.styles.fillColor = [236, 253, 245];
+        data.cell.styles.textColor = [4, 120, 87];
+      }
     },
   });
 
-  const finalY = (doc.lastAutoTable?.finalY || 110) + 12;
+  const notesY = doc.lastAutoTable.finalY + 14;
 
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-
-  doc.text("Subtotal:", 140, finalY);
-  doc.text(formatMoney(subtotal), 190, finalY, { align: "right" });
-
-  doc.text("Discount:", 140, finalY + 8);
-  doc.text(`- ${formatMoney(discount)}`, 190, finalY + 8, {
-    align: "right",
-  });
-
-  doc.text("Tax:", 140, finalY + 16);
-  doc.text(`+ ${formatMoney(tax)}`, 190, finalY + 16, {
-    align: "right",
-  });
-
-  doc.setDrawColor(226, 232, 240);
-  doc.line(140, finalY + 22, 190, finalY + 22);
-
-  doc.setFontSize(13);
-  doc.setFont("helvetica", "bold");
-  doc.text("Grand Total:", 140, finalY + 31);
-  doc.text(formatMoney(grandTotal), 190, finalY + 31, {
-    align: "right",
-  });
-
-  if (quotation.notes) {
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.text("Notes", 14, finalY + 45);
-
+  if (quotation?.notes || quotation?.terms) {
     doc.setFontSize(10);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont("helvetica", "bold");
+    doc.text("Notes / Terms", 14, notesY);
+
     doc.setFont("helvetica", "normal");
-    doc.text(quotation.notes, 14, finalY + 53, {
-      maxWidth: 120,
-    });
+    doc.setTextColor(71, 85, 105);
+    doc.text(
+      doc.splitTextToSize(quotation?.notes || quotation?.terms || "", 180),
+      14,
+      notesY + 7
+    );
   }
 
-  doc.setFontSize(9);
-  doc.setTextColor(100, 116, 139);
-  doc.text("This quotation is valid until the mentioned valid date.", 14, 285);
+  drawFooter(doc, company);
 
-  doc.text("Generated by BizFlow CRM", 196, 285, {
-    align: "right",
-  });
-
-  doc.save(`${quotationNumber}.pdf`);
+  doc.save(`Quotation-${quotationNumber}.pdf`);
 };
+
+export const generateQuotationPdf = createQuotationPdf;
+export const generateQuotationPDF = createQuotationPdf;
+export const downloadQuotationPdf = createQuotationPdf;
+export const downloadQuotationPDF = createQuotationPdf;
+
+export default createQuotationPdf;

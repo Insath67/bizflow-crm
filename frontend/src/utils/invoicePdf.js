@@ -1,163 +1,393 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import API from "../api/axios";
 
-export const generateInvoicePDF = (invoice) => {
-  const doc = new jsPDF();
+const getSafe = (value, fallback = "") => {
+  if (value === null || value === undefined || value === "") return fallback;
+  return value;
+};
 
-  const formatMoney = (amount) => {
-    return `Rs. ${Number(amount || 0).toLocaleString()}`;
-  };
+const getMoney = (value) => {
+  const numberValue = Number(value || 0);
+  return numberValue.toLocaleString("en-LK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
 
-  const formatDate = (date) => {
-    if (!date) return "-";
-    return new Date(date).toLocaleDateString();
-  };
+const getDate = (value) => {
+  if (!value) return "N/A";
 
-  const invoiceNumber = invoice.invoiceNumber || "INV-00000";
-  const customer = invoice.customer || {};
+  return new Date(value).toLocaleDateString("en-LK", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
 
+const getCompanySettings = async () => {
+  try {
+    const res = await API.get("/company");
+
+    return {
+      businessName: res.data.data.businessName || "BizFlow CRM",
+      businessEmail: res.data.data.businessEmail || "support@bizflowcrm.com",
+      phone: res.data.data.phone || "",
+      address: res.data.data.address || "",
+      website: res.data.data.website || "",
+      taxNumber: res.data.data.taxNumber || "",
+      currency: res.data.data.currency || "LKR",
+    };
+  } catch (error) {
+    console.error("Failed to load company settings for PDF:", error);
+
+    return {
+      businessName: "BizFlow CRM",
+      businessEmail: "support@bizflowcrm.com",
+      phone: "",
+      address: "",
+      website: "",
+      taxNumber: "",
+      currency: "LKR",
+    };
+  }
+};
+
+const getCustomerName = (invoice) => {
+  return (
+    invoice?.customer?.name ||
+    invoice?.customerName ||
+    invoice?.clientName ||
+    invoice?.name ||
+    "Customer"
+  );
+};
+
+const getCustomerEmail = (invoice) => {
+  return invoice?.customer?.email || invoice?.customerEmail || "";
+};
+
+const getCustomerPhone = (invoice) => {
+  return invoice?.customer?.phone || invoice?.customerPhone || "";
+};
+
+const getCustomerAddress = (invoice) => {
+  return invoice?.customer?.address || invoice?.customerAddress || "";
+};
+
+const getInvoiceNumber = (invoice) => {
+  return (
+    invoice?.invoiceNumber ||
+    invoice?.invoiceNo ||
+    invoice?.number ||
+    invoice?._id?.slice(-6)?.toUpperCase() ||
+    "INV-0001"
+  );
+};
+
+const getInvoiceItems = (invoice) => {
+  if (Array.isArray(invoice?.items) && invoice.items.length > 0) {
+    return invoice.items;
+  }
+
+  if (Array.isArray(invoice?.lineItems) && invoice.lineItems.length > 0) {
+    return invoice.lineItems;
+  }
+
+  if (invoice?.item) {
+    return [invoice.item];
+  }
+
+  return [];
+};
+
+const getItemName = (item) => {
+  return (
+    item?.item?.name ||
+    item?.product?.name ||
+    item?.service?.name ||
+    item?.name ||
+    item?.title ||
+    item?.description ||
+    "Item"
+  );
+};
+
+const getItemDescription = (item) => {
+  return item?.description || item?.item?.description || "";
+};
+
+const getItemQuantity = (item) => {
+  return Number(item?.quantity || item?.qty || 1);
+};
+
+const getItemPrice = (item) => {
+  return Number(
+    item?.price ||
+      item?.unitPrice ||
+      item?.rate ||
+      item?.item?.price ||
+      item?.amount ||
+      0
+  );
+};
+
+const calculateSubtotal = (items) => {
+  return items.reduce((sum, item) => {
+    const quantity = getItemQuantity(item);
+    const price = getItemPrice(item);
+    return sum + quantity * price;
+  }, 0);
+};
+
+const drawCompanyHeader = (doc, company) => {
   doc.setFillColor(15, 23, 42);
   doc.rect(0, 0, 210, 42, "F");
+
+  doc.setFillColor(16, 185, 129);
+  doc.roundedRect(14, 11, 18, 18, 4, 4, "F");
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(20);
+  doc.setFont("helvetica", "bold");
+  doc.text(company.businessName || "BizFlow CRM", 38, 18);
+
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(203, 213, 225);
+
+  const details = [
+    company.businessEmail,
+    company.phone,
+    company.website,
+    company.taxNumber ? `Tax/VAT: ${company.taxNumber}` : "",
+  ].filter(Boolean);
+
+  if (details.length > 0) {
+    doc.text(details.join("  |  "), 38, 25);
+  }
+
+  if (company.address) {
+    const addressLines = doc.splitTextToSize(company.address, 115);
+    doc.text(addressLines, 38, 31);
+  }
 
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(24);
   doc.setFont("helvetica", "bold");
-  doc.text("BizFlow CRM", 14, 18);
+  doc.text("INVOICE", 196, 20, { align: "right" });
 
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
-  doc.text("Business Management Suite", 14, 26);
+  doc.setTextColor(203, 213, 225);
+  doc.text("Generated by BizFlow CRM", 196, 28, { align: "right" });
+};
 
-  doc.setFontSize(22);
-  doc.setFont("helvetica", "bold");
-  doc.text("INVOICE", 160, 18);
+const drawFooter = (doc, company) => {
+  const pageHeight = doc.internal.pageSize.height;
 
-  doc.setFontSize(10);
+  doc.setDrawColor(226, 232, 240);
+  doc.line(14, pageHeight - 22, 196, pageHeight - 22);
+
+  doc.setTextColor(100, 116, 139);
+  doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
-  doc.text(invoiceNumber, 160, 26);
+
+  doc.text(
+    `Thank you for doing business with ${company.businessName || "us"}.`,
+    14,
+    pageHeight - 14
+  );
+
+  doc.text(
+    `Powered by BizFlow CRM`,
+    196,
+    pageHeight - 14,
+    { align: "right" }
+  );
+};
+
+const createInvoicePdf = async (invoice) => {
+  const company = await getCompanySettings();
+
+  const doc = new jsPDF("p", "mm", "a4");
+
+  drawCompanyHeader(doc, company);
+
+  const invoiceNumber = getInvoiceNumber(invoice);
+  const invoiceDate = getDate(invoice?.invoiceDate || invoice?.date || invoice?.createdAt);
+  const dueDate = getDate(invoice?.dueDate);
 
   doc.setTextColor(15, 23, 42);
 
-  doc.setFontSize(12);
+  doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
-  doc.text("Bill To", 14, 55);
+  doc.text("Bill To", 14, 58);
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text(customer.name || "Unknown Customer", 14, 63);
-  doc.text(customer.company || "-", 14, 70);
-  doc.text(customer.email || "-", 14, 77);
-  doc.text(customer.phone || "-", 14, 84);
+  doc.setTextColor(71, 85, 105);
 
-  doc.setFontSize(12);
+  doc.text(getCustomerName(invoice), 14, 66);
+
+  const customerLines = [
+    getCustomerEmail(invoice),
+    getCustomerPhone(invoice),
+    getCustomerAddress(invoice),
+  ].filter(Boolean);
+
+  let customerY = 72;
+  customerLines.forEach((line) => {
+    const splitLines = doc.splitTextToSize(line, 85);
+    doc.text(splitLines, 14, customerY);
+    customerY += splitLines.length * 5;
+  });
+
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
-  doc.text("Invoice Details", 140, 55);
+  doc.text("Invoice Details", 196, 58, { align: "right" });
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text(`Invoice No: ${invoiceNumber}`, 140, 63);
-  doc.text(`Due Date: ${formatDate(invoice.dueDate)}`, 140, 70);
-  doc.text(`Status: ${invoice.status || "draft"}`, 140, 77);
+  doc.setTextColor(71, 85, 105);
 
-  const tableRows =
-    invoice.items?.map((item, index) => {
-      const quantity = Number(item.quantity || 0);
-      const price = Number(item.price || 0);
-      const lineTotal = quantity * price;
+  doc.text(`Invoice No: ${invoiceNumber}`, 196, 66, { align: "right" });
+  doc.text(`Invoice Date: ${invoiceDate}`, 196, 72, { align: "right" });
+  doc.text(`Due Date: ${dueDate}`, 196, 78, { align: "right" });
+  doc.text(`Status: ${getSafe(invoice?.status, "Pending")}`, 196, 84, {
+    align: "right",
+  });
 
-      return [
-        index + 1,
-        item.name || "-",
-        item.description || "-",
-        quantity,
-        formatMoney(price),
-        formatMoney(lineTotal),
-      ];
-    }) || [];
+  const items = getInvoiceItems(invoice);
+
+  const tableBody =
+    items.length > 0
+      ? items.map((item, index) => {
+          const quantity = getItemQuantity(item);
+          const price = getItemPrice(item);
+          const total = quantity * price;
+
+          return [
+            index + 1,
+            `${getItemName(item)}${
+              getItemDescription(item) ? `\n${getItemDescription(item)}` : ""
+            }`,
+            quantity,
+            `${company.currency} ${getMoney(price)}`,
+            `${company.currency} ${getMoney(total)}`,
+          ];
+        })
+      : [
+          [
+            1,
+            getSafe(invoice?.description, "Invoice service/item"),
+            1,
+            `${company.currency} ${getMoney(invoice?.amount || invoice?.total)}`,
+            `${company.currency} ${getMoney(invoice?.amount || invoice?.total)}`,
+          ],
+        ];
 
   autoTable(doc, {
-    startY: 98,
-    head: [["#", "Item", "Description", "Qty", "Price", "Total"]],
-    body: tableRows,
+    startY: 100,
+    head: [["#", "Item / Description", "Qty", "Unit Price", "Total"]],
+    body: tableBody,
     theme: "grid",
     headStyles: {
       fillColor: [15, 23, 42],
       textColor: [255, 255, 255],
       fontStyle: "bold",
+      halign: "center",
     },
-    styles: {
+    bodyStyles: {
+      textColor: [51, 65, 85],
       fontSize: 9,
-      cellPadding: 3,
+      cellPadding: 4,
     },
     columnStyles: {
-      0: { cellWidth: 12 },
-      1: { cellWidth: 38 },
-      2: { cellWidth: 55 },
-      3: { cellWidth: 18, halign: "center" },
-      4: { cellWidth: 32, halign: "right" },
-      5: { cellWidth: 32, halign: "right" },
+      0: { halign: "center", cellWidth: 12 },
+      1: { cellWidth: 78 },
+      2: { halign: "center", cellWidth: 18 },
+      3: { halign: "right", cellWidth: 35 },
+      4: { halign: "right", cellWidth: 35 },
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252],
     },
   });
+
+  const subtotal =
+    Number(invoice?.subtotal) ||
+    calculateSubtotal(items) ||
+    Number(invoice?.amount || invoice?.total || 0);
+
+  const discount = Number(invoice?.discount || 0);
+  const tax = Number(invoice?.tax || invoice?.taxAmount || 0);
+  const paid = Number(invoice?.paidAmount || invoice?.paid || 0);
+  const total =
+    Number(invoice?.total) ||
+    Number(invoice?.totalAmount) ||
+    subtotal - discount + tax;
+  const balance = Number(invoice?.balance || total - paid);
 
   const finalY = doc.lastAutoTable.finalY + 12;
 
-  const subtotal = Number(invoice.subtotal || 0);
-  const discount = Number(invoice.discount || 0);
-  const tax = Number(invoice.tax || 0);
-  const grandTotal = Number(invoice.grandTotal || 0);
-
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-
-  doc.text("Subtotal:", 140, finalY);
-  doc.text(formatMoney(subtotal), 190, finalY, { align: "right" });
-
-  doc.text("Discount:", 140, finalY + 8);
-  doc.text(`- ${formatMoney(discount)}`, 190, finalY + 8, {
-    align: "right",
+  autoTable(doc, {
+    startY: finalY,
+    margin: { left: 118 },
+    body: [
+      ["Subtotal", `${company.currency} ${getMoney(subtotal)}`],
+      ["Discount", `${company.currency} ${getMoney(discount)}`],
+      ["Tax", `${company.currency} ${getMoney(tax)}`],
+      ["Paid", `${company.currency} ${getMoney(paid)}`],
+      ["Balance Due", `${company.currency} ${getMoney(balance)}`],
+      ["Grand Total", `${company.currency} ${getMoney(total)}`],
+    ],
+    theme: "plain",
+    styles: {
+      fontSize: 10,
+      cellPadding: 3,
+    },
+    columnStyles: {
+      0: {
+        fontStyle: "bold",
+        textColor: [15, 23, 42],
+      },
+      1: {
+        halign: "right",
+        textColor: [15, 23, 42],
+      },
+    },
+    didParseCell: (data) => {
+      if (data.row.index === 5) {
+        data.cell.styles.fontStyle = "bold";
+        data.cell.styles.fillColor = [236, 253, 245];
+        data.cell.styles.textColor = [4, 120, 87];
+      }
+    },
   });
 
-  doc.text("Tax:", 140, finalY + 16);
-  doc.text(`+ ${formatMoney(tax)}`, 190, finalY + 16, {
-    align: "right",
-  });
+  const notesY = doc.lastAutoTable.finalY + 14;
 
-  doc.setDrawColor(226, 232, 240);
-  doc.line(140, finalY + 22, 190, finalY + 22);
-
-  doc.setFontSize(13);
-  doc.setFont("helvetica", "bold");
-  doc.text("Grand Total:", 140, finalY + 31);
-  doc.text(formatMoney(grandTotal), 190, finalY + 31, {
-    align: "right",
-  });
-
-  if (invoice.notes) {
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.text("Notes", 14, finalY + 45);
-
+  if (invoice?.notes) {
     doc.setFontSize(10);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont("helvetica", "bold");
+    doc.text("Notes", 14, notesY);
+
     doc.setFont("helvetica", "normal");
-    doc.text(invoice.notes, 14, finalY + 53, {
-      maxWidth: 120,
-    });
+    doc.setTextColor(71, 85, 105);
+    doc.text(doc.splitTextToSize(invoice.notes, 180), 14, notesY + 7);
   }
 
-  doc.setFontSize(9);
-  doc.setTextColor(100, 116, 139);
-  doc.text(
-    "Thank you for doing business with us.",
-    14,
-    285
-  );
+  drawFooter(doc, company);
 
-  doc.text(
-    "Generated by BizFlow CRM",
-    196,
-    285,
-    { align: "right" }
-  );
-
-  doc.save(`${invoiceNumber}.pdf`);
+  doc.save(`Invoice-${invoiceNumber}.pdf`);
 };
+
+export const generateInvoicePdf = createInvoicePdf;
+export const generateInvoicePDF = createInvoicePdf;
+export const downloadInvoicePdf = createInvoicePdf;
+export const downloadInvoicePDF = createInvoicePdf;
+
+export default createInvoicePdf;
