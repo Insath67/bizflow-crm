@@ -302,31 +302,6 @@ The backend includes the following main API modules:
 
 ---
 
-## Important Backend Routes
-
-### Auth Routes
-
-```text
-POST /api/auth/register
-POST /api/auth/verify-email
-POST /api/auth/resend-verification-code
-POST /api/auth/login
-POST /api/auth/forgot-password
-POST /api/auth/reset-password
-GET  /api/auth/profile
-PUT  /api/auth/profile
-PUT  /api/auth/change-password
-```
-
-### Company Routes
-
-```text
-GET /api/company
-PUT /api/company
-```
-
----
-
 ## Core Modules
 
 ### Dashboard
@@ -423,6 +398,7 @@ VITE_API_URL=https://bizflow-crm-backend.vercel.app/api
 - Password reset is handled using email reset codes
 - Public users cannot register themselves as admin
 - Admin role should be assigned manually through MongoDB Atlas
+- Sensitive environment variables are not stored in the repository
 
 ---
 
