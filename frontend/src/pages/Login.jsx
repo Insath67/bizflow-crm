@@ -3,8 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   BarChart3,
   Building2,
+  CheckCircle2,
   Eye,
   EyeOff,
+  KeyRound,
   Lock,
   Mail,
   ReceiptText,
@@ -20,6 +22,11 @@ const Login = ({ defaultMode = "login" }) => {
   const [isRegisterMode, setIsRegisterMode] = useState(
     defaultMode === "register"
   );
+
+  const [authStep, setAuthStep] = useState("form");
+  const [verificationEmail, setVerificationEmail] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -31,7 +38,9 @@ const Login = ({ defaultMode = "login" }) => {
   });
 
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   const handleChange = (e) => {
     setFormData((prev) => ({
@@ -40,9 +49,16 @@ const Login = ({ defaultMode = "login" }) => {
     }));
   };
 
+  const saveUserAndRedirect = (data) => {
+    localStorage.setItem("bizflow_token", data.token);
+    localStorage.setItem("bizflow_user", JSON.stringify(data));
+    navigate("/dashboard");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setSuccessMessage("");
     setLoading(true);
 
     try {
@@ -73,18 +89,27 @@ const Login = ({ defaultMode = "login" }) => {
           password: formData.password,
           role: "admin",
         });
+
+        setVerificationEmail(res.data.data.email);
+        setAuthStep("verify");
+        setSuccessMessage("Verification code sent to your email.");
       } else {
         res = await API.post("/auth/login", {
           email: formData.email,
           password: formData.password,
         });
+
+        saveUserAndRedirect(res.data.data);
+      }
+    } catch (error) {
+      if (error.response?.data?.needsVerification) {
+        setVerificationEmail(error.response.data.email || formData.email);
+        setAuthStep("verify");
+        setSuccessMessage("Please verify your email before logging in.");
+        setError("");
+        return;
       }
 
-      localStorage.setItem("bizflow_token", res.data.data.token);
-      localStorage.setItem("bizflow_user", JSON.stringify(res.data.data));
-
-      navigate("/dashboard");
-    } catch (error) {
       setError(
         error.response?.data?.message ||
           (isRegisterMode
@@ -96,14 +121,68 @@ const Login = ({ defaultMode = "login" }) => {
     }
   };
 
+  const handleVerifyEmail = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccessMessage("");
+    setLoading(true);
+
+    try {
+      if (!verificationCode.trim()) {
+        setError("Please enter your verification code.");
+        setLoading(false);
+        return;
+      }
+
+      const res = await API.post("/auth/verify-email", {
+        email: verificationEmail,
+        code: verificationCode,
+      });
+
+      saveUserAndRedirect(res.data.data);
+    } catch (error) {
+      setError(
+        error.response?.data?.message ||
+          "Email verification failed. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    setError("");
+    setSuccessMessage("");
+    setResending(true);
+
+    try {
+      await API.post("/auth/resend-verification-code", {
+        email: verificationEmail,
+      });
+
+      setSuccessMessage("New verification code sent to your email.");
+    } catch (error) {
+      setError(
+        error.response?.data?.message ||
+          "Failed to resend verification code."
+      );
+    } finally {
+      setResending(false);
+    }
+  };
+
   const handleForgotPassword = () => {
     navigate("/forgot-password");
   };
 
   const switchMode = () => {
     setError("");
+    setSuccessMessage("");
     setShowPassword(false);
     setShowConfirmPassword(false);
+    setVerificationCode("");
+    setVerificationEmail("");
+    setAuthStep("form");
     setIsRegisterMode((prev) => !prev);
 
     setFormData({
@@ -112,6 +191,13 @@ const Login = ({ defaultMode = "login" }) => {
       password: "",
       confirmPassword: "",
     });
+  };
+
+  const backToForm = () => {
+    setAuthStep("form");
+    setVerificationCode("");
+    setError("");
+    setSuccessMessage("");
   };
 
   return (
@@ -154,7 +240,7 @@ const Login = ({ defaultMode = "login" }) => {
               <ShieldCheck className="text-emerald-300 mb-4" size={26} />
               <h3 className="font-bold">Secure Auth</h3>
               <p className="text-sm text-slate-400 mt-1">
-                JWT protected dashboard
+                Email verified dashboard
               </p>
             </div>
 
@@ -185,190 +271,299 @@ const Login = ({ defaultMode = "login" }) => {
               ← Back to home
             </Link>
 
-            <div className="mb-8">
-              <p className="text-sm font-bold text-emerald-600 mb-2">
-                {isRegisterMode ? "Create your account" : "Welcome back"}
-              </p>
-
-              <h2 className="text-4xl font-black text-slate-950">
-                {isRegisterMode ? "Create account" : "Login to dashboard"}
-              </h2>
-
-              <p className="text-slate-500 mt-3">
-                {isRegisterMode
-                  ? "Create an account to start managing your business."
-                  : "Enter your account details to continue managing your business."}
-              </p>
-            </div>
-
-            {error && (
-              <div className="mb-5 rounded-2xl bg-red-50 border border-red-100 text-red-600 px-4 py-3 text-sm font-semibold">
-                {error}
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {isRegisterMode && (
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
-                    Full Name
-                  </label>
-
-                  <div className="relative">
-                    <UserPlus
-                      size={19}
-                      className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                    />
-
-                    <input
-                      type="text"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleChange}
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-4 py-4 outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition"
-                      placeholder="Enter your name"
-                      required={isRegisterMode}
-                    />
+            {authStep === "verify" ? (
+              <>
+                <div className="mb-8">
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-5">
+                    <Mail size={27} />
                   </div>
-                </div>
-              )}
 
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">
-                  Email Address
-                </label>
+                  <p className="text-sm font-bold text-emerald-600 mb-2">
+                    Email Verification
+                  </p>
 
-                <div className="relative">
-                  <Mail
-                    size={19}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                  />
+                  <h2 className="text-4xl font-black text-slate-950">
+                    Check your email
+                  </h2>
 
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-4 py-4 outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition"
-                    placeholder="Enter your email"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-bold text-slate-700">
-                    Password
-                  </label>
-
-                  {!isRegisterMode && (
-                    <button
-                      type="button"
-                      onClick={handleForgotPassword}
-                      className="text-sm font-bold text-emerald-600 hover:text-emerald-700"
-                    >
-                      Forgot password?
-                    </button>
-                  )}
+                  <p className="text-slate-500 mt-3">
+                    Enter the 6-digit code sent to{" "}
+                    <span className="font-bold text-slate-800">
+                      {verificationEmail}
+                    </span>
+                    .
+                  </p>
                 </div>
 
-                <div className="relative">
-                  <Lock
-                    size={19}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                  />
+                {error && (
+                  <div className="mb-5 rounded-2xl bg-red-50 border border-red-100 text-red-600 px-4 py-3 text-sm font-semibold">
+                    {error}
+                  </div>
+                )}
 
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    name="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-12 py-4 outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition"
-                    placeholder={
-                      isRegisterMode ? "Create password" : "Enter password"
-                    }
-                    required
-                  />
+                {successMessage && (
+                  <div className="mb-5 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-700 px-4 py-3 text-sm font-semibold flex items-start gap-2">
+                    <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+                    <span>{successMessage}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleVerifyEmail} className="space-y-5">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">
+                      Verification Code
+                    </label>
+
+                    <div className="relative">
+                      <KeyRound
+                        size={19}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                      />
+
+                      <input
+                        type="text"
+                        value={verificationCode}
+                        onChange={(e) =>
+                          setVerificationCode(e.target.value.replace(/\D/g, ""))
+                        }
+                        maxLength="6"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-4 py-4 outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition tracking-[0.4em] font-black text-center text-xl"
+                        placeholder="000000"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white py-4 font-black transition shadow-lg shadow-emerald-600/20 disabled:opacity-60"
+                  >
+                    {loading ? "Verifying..." : "Verify Email"}
+                  </button>
+                </form>
+
+                <div className="mt-6 text-center space-y-3">
+                  <button
+                    type="button"
+                    onClick={handleResendCode}
+                    disabled={resending}
+                    className="font-black text-emerald-600 hover:text-emerald-700 disabled:opacity-60"
+                  >
+                    {resending ? "Sending..." : "Resend code"}
+                  </button>
+
+                  <br />
 
                   <button
                     type="button"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
-                    aria-label="Toggle password visibility"
+                    onClick={backToForm}
+                    className="text-sm font-bold text-slate-500 hover:text-slate-900"
                   >
-                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    Use different email
                   </button>
                 </div>
-              </div>
+              </>
+            ) : (
+              <>
+                <div className="mb-8">
+                  <p className="text-sm font-bold text-emerald-600 mb-2">
+                    {isRegisterMode ? "Create your account" : "Welcome back"}
+                  </p>
 
-              {isRegisterMode && (
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
-                    Confirm Password
-                  </label>
+                  <h2 className="text-4xl font-black text-slate-950">
+                    {isRegisterMode ? "Create account" : "Login to dashboard"}
+                  </h2>
 
-                  <div className="relative">
-                    <Lock
-                      size={19}
-                      className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                    />
+                  <p className="text-slate-500 mt-3">
+                    {isRegisterMode
+                      ? "Create an account and verify your email to start managing your business."
+                      : "Enter your account details to continue managing your business."}
+                  </p>
+                </div>
 
-                    <input
-                      type={showConfirmPassword ? "text" : "password"}
-                      name="confirmPassword"
-                      value={formData.confirmPassword}
-                      onChange={handleChange}
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-12 py-4 outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition"
-                      placeholder="Confirm password"
-                      required={isRegisterMode}
-                    />
+                {error && (
+                  <div className="mb-5 rounded-2xl bg-red-50 border border-red-100 text-red-600 px-4 py-3 text-sm font-semibold">
+                    {error}
+                  </div>
+                )}
 
+                {successMessage && (
+                  <div className="mb-5 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-700 px-4 py-3 text-sm font-semibold">
+                    {successMessage}
+                  </div>
+                )}
+
+                <form onSubmit={handleSubmit} className="space-y-5">
+                  {isRegisterMode && (
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-2">
+                        Full Name
+                      </label>
+
+                      <div className="relative">
+                        <UserPlus
+                          size={19}
+                          className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                        />
+
+                        <input
+                          type="text"
+                          name="name"
+                          value={formData.name}
+                          onChange={handleChange}
+                          className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-4 py-4 outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition"
+                          placeholder="Enter your name"
+                          required={isRegisterMode}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">
+                      Email Address
+                    </label>
+
+                    <div className="relative">
+                      <Mail
+                        size={19}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                      />
+
+                      <input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleChange}
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-4 py-4 outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition"
+                        placeholder="Enter your email"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-bold text-slate-700">
+                        Password
+                      </label>
+
+                      {!isRegisterMode && (
+                        <button
+                          type="button"
+                          onClick={handleForgotPassword}
+                          className="text-sm font-bold text-emerald-600 hover:text-emerald-700"
+                        >
+                          Forgot password?
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="relative">
+                      <Lock
+                        size={19}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                      />
+
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        name="password"
+                        value={formData.password}
+                        onChange={handleChange}
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-12 py-4 outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition"
+                        placeholder={
+                          isRegisterMode ? "Create password" : "Enter password"
+                        }
+                        required
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                        aria-label="Toggle password visibility"
+                      >
+                        {showPassword ? (
+                          <EyeOff size={20} />
+                        ) : (
+                          <Eye size={20} />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {isRegisterMode && (
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-2">
+                        Confirm Password
+                      </label>
+
+                      <div className="relative">
+                        <Lock
+                          size={19}
+                          className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                        />
+
+                        <input
+                          type={showConfirmPassword ? "text" : "password"}
+                          name="confirmPassword"
+                          value={formData.confirmPassword}
+                          onChange={handleChange}
+                          className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-12 py-4 outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition"
+                          placeholder="Confirm password"
+                          required={isRegisterMode}
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowConfirmPassword((prev) => !prev)
+                          }
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                          aria-label="Toggle confirm password visibility"
+                        >
+                          {showConfirmPassword ? (
+                            <EyeOff size={20} />
+                          ) : (
+                            <Eye size={20} />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white py-4 font-black transition shadow-lg shadow-emerald-600/20 disabled:opacity-60"
+                  >
+                    {loading
+                      ? isRegisterMode
+                        ? "Sending code..."
+                        : "Logging in..."
+                      : isRegisterMode
+                      ? "Create Account"
+                      : "Login to BizFlow"}
+                  </button>
+                </form>
+
+                <div className="mt-6 text-center">
+                  <p className="text-sm text-slate-500">
+                    {isRegisterMode
+                      ? "Already have an account?"
+                      : "Don’t have an account?"}{" "}
                     <button
                       type="button"
-                      onClick={() => setShowConfirmPassword((prev) => !prev)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
-                      aria-label="Toggle confirm password visibility"
+                      onClick={switchMode}
+                      className="font-black text-emerald-600 hover:text-emerald-700"
                     >
-                      {showConfirmPassword ? (
-                        <EyeOff size={20} />
-                      ) : (
-                        <Eye size={20} />
-                      )}
+                      {isRegisterMode ? "Login here" : "Create account"}
                     </button>
-                  </div>
+                  </p>
                 </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white py-4 font-black transition shadow-lg shadow-emerald-600/20 disabled:opacity-60"
-              >
-                {loading
-                  ? isRegisterMode
-                    ? "Creating account..."
-                    : "Logging in..."
-                  : isRegisterMode
-                  ? "Create Account"
-                  : "Login to BizFlow"}
-              </button>
-            </form>
-
-            <div className="mt-6 text-center">
-              <p className="text-sm text-slate-500">
-                {isRegisterMode
-                  ? "Already have an account?"
-                  : "Don’t have an account?"}{" "}
-                <button
-                  type="button"
-                  onClick={switchMode}
-                  className="font-black text-emerald-600 hover:text-emerald-700"
-                >
-                  {isRegisterMode ? "Login here" : "Create account"}
-                </button>
-              </p>
-            </div>
+              </>
+            )}
           </div>
         </div>
       </div>
