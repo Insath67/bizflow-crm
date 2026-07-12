@@ -1,9 +1,20 @@
 const express = require("express");
-const { registerUser, loginUser } = require("../controllers/authController");
+const {
+  register,
+  verifyEmail,
+  resendVerificationCode,
+  login,
+  forgotPassword,
+  resetPassword,
+} = require("../controllers/authController");
 
 const router = express.Router();
 
-router.post("/register", registerUser);
-router.post("/login", loginUser);
+router.post("/register", register);
+router.post("/verify-email", verifyEmail);
+router.post("/resend-verification-code", resendVerificationCode);
+router.post("/login", login);
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
 
 module.exports = router;

@@ -25,8 +25,33 @@ const userSchema = new mongoose.Schema(
 
     role: {
       type: String,
-      enum: ["admin", "staff"],
+      enum: ["admin", "user"],
       default: "admin",
+    },
+
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    emailVerificationCode: {
+      type: String,
+      default: null,
+    },
+
+    emailVerificationExpires: {
+      type: Date,
+      default: null,
+    },
+
+    passwordResetCode: {
+      type: String,
+      default: null,
+    },
+
+    passwordResetExpires: {
+      type: Date,
+      default: null,
     },
   },
   {
@@ -34,7 +59,6 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// Hash password before saving user
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) {
     return;
@@ -44,7 +68,6 @@ userSchema.pre("save", async function () {
   this.password = await bcrypt.hash(this.password, salt);
 });
 
-// Compare entered password with hashed password
 userSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
