@@ -5,8 +5,6 @@ const connectDB = require("./config/db");
 
 dotenv.config();
 
-connectDB();
-
 const app = express();
 
 app.use(cors());
@@ -19,6 +17,22 @@ app.get("/", (req, res) => {
   });
 });
 
+const ensureDatabaseConnection = async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Database connection failed",
+      error:
+        process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
+app.use("/api", ensureDatabaseConnection);
+
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/customers", require("./routes/customerRoutes"));
 app.use("/api/items", require("./routes/itemRoutes"));
@@ -29,6 +43,17 @@ app.use("/api/dashboard", require("./routes/dashboardRoutes"));
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`BizFlow CRM server running on port ${PORT}`);
-});
+if (!process.env.VERCEL) {
+  connectDB()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`BizFlow CRM server running on port ${PORT}`);
+      });
+    })
+    .catch((error) => {
+      console.error(`Server failed to start: ${error.message}`);
+      process.exit(1);
+    });
+}
+
+module.exports = app;
