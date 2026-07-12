@@ -9,7 +9,6 @@ import {
   Menu,
   Package,
   ReceiptText,
-  UserCircle,
   Users,
   WalletCards,
   X,
@@ -45,11 +44,6 @@ const navLinks = [
     name: "Payments",
     path: "/payments",
     icon: WalletCards,
-  },
-  {
-    name: "Profile",
-    path: "/profile",
-    icon: UserCircle,
   },
 ];
 
@@ -98,10 +92,10 @@ const MainLayout = ({ children }) => {
   const userInitial = user?.name?.charAt(0)?.toUpperCase() || "U";
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="min-h-screen bg-slate-100 overflow-x-hidden">
       <header className="sticky top-0 z-40 bg-slate-950 border-b border-white/10 shadow-xl shadow-slate-950/10">
         <div className="px-5 lg:px-8 py-5">
-          <div className="flex items-center justify-between gap-5">
+          <div className="flex items-center justify-between gap-4 w-full">
             <button
               type="button"
               onClick={() => navigate("/dashboard")}
@@ -121,7 +115,7 @@ const MainLayout = ({ children }) => {
               </div>
             </button>
 
-            <nav className="hidden xl:flex items-center gap-2 bg-white/5 border border-white/10 rounded-[1.7rem] p-2">
+            <nav className="hidden xl:flex items-center gap-1 bg-white/5 border border-white/10 rounded-[1.7rem] p-2 max-w-[820px] shrink">
               {navLinks.map((link) => {
                 const Icon = link.icon;
 
@@ -130,7 +124,7 @@ const MainLayout = ({ children }) => {
                     key={link.path}
                     to={link.path}
                     className={({ isActive }) =>
-                      `flex items-center gap-2 px-5 py-3 rounded-2xl text-sm font-black transition ${
+                      `flex items-center gap-2 px-3.5 py-3 rounded-2xl text-sm font-black transition whitespace-nowrap ${
                         isActive
                           ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/25"
                           : "text-slate-300 hover:text-white hover:bg-white/10"
@@ -144,32 +138,33 @@ const MainLayout = ({ children }) => {
               })}
             </nav>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 shrink-0">
               <button
                 type="button"
                 onClick={() => navigate("/profile")}
-                className="hidden md:flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white hover:bg-white/10 transition"
+                className="hidden md:flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white hover:bg-white/10 transition max-w-[260px]"
+                title="Open profile"
               >
-                <div className="w-11 h-11 rounded-2xl bg-emerald-500 flex items-center justify-center font-black text-lg">
+                <div className="w-11 h-11 rounded-2xl bg-emerald-500 flex items-center justify-center font-black text-lg shadow-lg shadow-emerald-500/20 shrink-0">
                   {userInitial}
                 </div>
 
-                <div className="text-left">
-                  <p className="font-black leading-none">
+                <div className="text-left min-w-0">
+                  <p className="font-black leading-tight truncate max-w-[145px]">
                     {user?.name || "BizFlow User"}
                   </p>
-                  <p className="text-sm text-slate-400 mt-2 capitalize">
+                  <p className="text-sm text-slate-400 mt-1 capitalize">
                     {user?.role || "user"}
                   </p>
                 </div>
 
-                <ChevronDown size={18} className="text-slate-400" />
+                <ChevronDown size={18} className="text-slate-400 shrink-0" />
               </button>
 
               <button
                 type="button"
                 onClick={handleLogout}
-                className="hidden md:flex items-center gap-2 bg-white text-slate-950 rounded-2xl px-6 py-4 font-black hover:bg-slate-100 transition"
+                className="hidden md:flex items-center gap-2 bg-white text-slate-950 rounded-2xl px-5 py-4 font-black hover:bg-slate-100 transition shrink-0"
               >
                 <LogOut size={19} />
                 Logout
@@ -187,20 +182,27 @@ const MainLayout = ({ children }) => {
 
           {mobileMenuOpen && (
             <div className="xl:hidden mt-5 bg-white/5 border border-white/10 rounded-[1.7rem] p-3">
-              <div className="md:hidden flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl px-4 py-4 mb-3 text-white">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  navigate("/profile");
+                }}
+                className="w-full flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl px-4 py-4 mb-3 text-white text-left"
+              >
                 <div className="w-11 h-11 rounded-2xl bg-emerald-500 flex items-center justify-center font-black text-lg">
                   {userInitial}
                 </div>
 
-                <div>
-                  <p className="font-black leading-none">
+                <div className="min-w-0">
+                  <p className="font-black leading-none truncate">
                     {user?.name || "BizFlow User"}
                   </p>
                   <p className="text-sm text-slate-400 mt-2 capitalize">
                     {user?.role || "user"}
                   </p>
                 </div>
-              </div>
+              </button>
 
               <div className="grid sm:grid-cols-2 gap-2">
                 {navLinks.map((link) => {
@@ -227,8 +229,20 @@ const MainLayout = ({ children }) => {
 
                 <button
                   type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    navigate("/profile");
+                  }}
+                  className="flex items-center gap-3 px-4 py-4 rounded-2xl text-sm font-black text-slate-300 hover:text-white hover:bg-white/10"
+                >
+                  <ChevronDown size={19} />
+                  My Profile
+                </button>
+
+                <button
+                  type="button"
                   onClick={handleLogout}
-                  className="md:hidden flex items-center gap-3 px-4 py-4 rounded-2xl text-sm font-black bg-white text-slate-950"
+                  className="flex items-center gap-3 px-4 py-4 rounded-2xl text-sm font-black bg-white text-slate-950"
                 >
                   <LogOut size={19} />
                   Logout
