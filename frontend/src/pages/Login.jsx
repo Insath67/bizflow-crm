@@ -87,7 +87,6 @@ const Login = ({ defaultMode = "login" }) => {
           name: formData.name,
           email: formData.email,
           password: formData.password,
-          role: "admin",
         });
 
         setVerificationEmail(res.data.data.email);

@@ -66,7 +66,7 @@ const sendUserResponse = (res, user, message) => {
 
 const register = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({
@@ -97,7 +97,7 @@ const register = async (req, res) => {
     if (user && user.isVerified === false) {
       user.name = name;
       user.password = password;
-      user.role = role || "admin";
+      user.role = "user";
       user.emailVerificationCode = verificationCode;
       user.emailVerificationExpires = createCodeExpiry();
 
@@ -107,7 +107,7 @@ const register = async (req, res) => {
         name,
         email: normalizedEmail,
         password,
-        role: role || "admin",
+        role: "user",
         isVerified: false,
         emailVerificationCode: verificationCode,
         emailVerificationExpires: createCodeExpiry(),
