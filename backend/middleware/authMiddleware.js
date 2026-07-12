@@ -15,19 +15,29 @@ const protect = async (req, res, next) => {
     if (!token) {
       return res.status(401).json({
         success: false,
-        message: "Not authorized, no token",
+        message: "Not authorized. No token provided.",
       });
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    req.user = await User.findById(decoded.id).select("-password");
+    const user = await User.findById(decoded.id).select(
+      "-password -emailVerificationCode -emailVerificationExpires -passwordResetCode -passwordResetExpires"
+    );
 
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    req.user = user;
     next();
   } catch (error) {
-    res.status(401).json({
+    return res.status(401).json({
       success: false,
-      message: "Not authorized, token failed",
+      message: "Not authorized. Invalid token.",
     });
   }
 };

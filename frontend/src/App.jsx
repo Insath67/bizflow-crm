@@ -8,6 +8,7 @@ import Quotations from "./pages/Quotations";
 import Invoices from "./pages/Invoices";
 import Payments from "./pages/Payments";
 import ForgotPassword from "./pages/ForgotPassword";
+import Profile from "./pages/Profile";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
@@ -69,6 +70,15 @@ function App() {
         element={
           <ProtectedRoute>
             <Payments />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <Profile />
           </ProtectedRoute>
         }
       />

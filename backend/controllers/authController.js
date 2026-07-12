@@ -59,6 +59,7 @@ const sendUserResponse = (res, user, message) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      isVerified: user.isVerified,
       token: generateToken(user._id),
     },
   });
@@ -95,7 +96,7 @@ const register = async (req, res) => {
     }
 
     if (user && user.isVerified === false) {
-      user.name = name;
+      user.name = name.trim();
       user.password = password;
       user.role = "user";
       user.emailVerificationCode = verificationCode;
@@ -104,7 +105,7 @@ const register = async (req, res) => {
       await user.save();
     } else {
       user = await User.create({
-        name,
+        name: name.trim(),
         email: normalizedEmail,
         password,
         role: "user",
@@ -414,6 +415,131 @@ const resetPassword = async (req, res) => {
   }
 };
 
+const getProfile = async (req, res) => {
+  try {
+    res.status(200).json({
+      success: true,
+      message: "Profile loaded successfully.",
+      data: {
+        _id: req.user._id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role,
+        isVerified: req.user.isVerified,
+        createdAt: req.user.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("Get Profile Error:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to load profile.",
+    });
+  }
+};
+
+const updateProfile = async (req, res) => {
+  try {
+    const { name } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Name is required.",
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    user.name = name.trim();
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully.",
+      data: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isVerified: user.isVerified,
+        createdAt: user.createdAt,
+        token: generateToken(user._id),
+      },
+    });
+  } catch (error) {
+    console.error("Update Profile Error:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update profile.",
+    });
+  }
+};
+
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Current password and new password are required.",
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters.",
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    const isMatch = await user.matchPassword(currentPassword);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: "Current password is incorrect.",
+      });
+    }
+
+    user.password = newPassword;
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Password changed successfully.",
+    });
+  } catch (error) {
+    console.error("Change Password Error:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to change password.",
+    });
+  }
+};
+
 module.exports = {
   register,
   verifyEmail,
@@ -421,4 +547,7 @@ module.exports = {
   login,
   forgotPassword,
   resetPassword,
+  getProfile,
+  updateProfile,
+  changePassword,
 };
