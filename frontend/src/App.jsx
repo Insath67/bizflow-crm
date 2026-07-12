@@ -9,6 +9,7 @@ import Invoices from "./pages/Invoices";
 import Payments from "./pages/Payments";
 import ForgotPassword from "./pages/ForgotPassword";
 import Profile from "./pages/Profile";
+import CompanySettings from "./pages/CompanySettings";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
@@ -79,6 +80,15 @@ function App() {
         element={
           <ProtectedRoute>
             <Profile />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/company-settings"
+        element={
+          <ProtectedRoute>
+            <CompanySettings />
           </ProtectedRoute>
         }
       />

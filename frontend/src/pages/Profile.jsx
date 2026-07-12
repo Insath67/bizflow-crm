@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import {
+  ArrowRight,
   BadgeCheck,
+  Building2,
   CalendarDays,
   Eye,
   EyeOff,
@@ -11,10 +13,13 @@ import {
   User,
   UserCircle,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import MainLayout from "../components/MainLayout";
 import API from "../api/axios";
 
 const Profile = () => {
+  const navigate = useNavigate();
+
   const [profile, setProfile] = useState(null);
 
   const [name, setName] = useState("");
@@ -67,6 +72,8 @@ const Profile = () => {
 
       localStorage.setItem("bizflow_user", JSON.stringify(res.data.data));
       localStorage.setItem("bizflow_token", res.data.data.token);
+
+      window.dispatchEvent(new Event("bizflow-user-updated"));
 
       setProfileMessage("Profile updated successfully.");
     } catch (error) {
@@ -166,6 +173,7 @@ const Profile = () => {
             </div>
 
             <p className="text-sm text-slate-500 font-bold">Name</p>
+
             <h3 className="text-xl font-black text-slate-950 mt-1">
               {profile?.name}
             </h3>
@@ -177,6 +185,7 @@ const Profile = () => {
             </div>
 
             <p className="text-sm text-slate-500 font-bold">Email</p>
+
             <h3 className="text-sm font-black text-slate-950 mt-2 break-all">
               {profile?.email}
             </h3>
@@ -188,6 +197,7 @@ const Profile = () => {
             </div>
 
             <p className="text-sm text-slate-500 font-bold">Role</p>
+
             <h3 className="text-xl font-black text-slate-950 mt-1 capitalize">
               {profile?.role}
             </h3>
@@ -199,6 +209,7 @@ const Profile = () => {
             </div>
 
             <p className="text-sm text-slate-500 font-bold">Joined</p>
+
             <h3 className="text-sm font-black text-slate-950 mt-2">
               {formatDate(profile?.createdAt)}
             </h3>
@@ -216,6 +227,7 @@ const Profile = () => {
                 <h2 className="text-2xl font-black text-slate-950">
                   Account Details
                 </h2>
+
                 <p className="text-sm text-slate-500">
                   Update your visible profile name.
                 </p>
@@ -289,6 +301,7 @@ const Profile = () => {
                 <h2 className="text-2xl font-black text-slate-950">
                   Security
                 </h2>
+
                 <p className="text-sm text-slate-500">
                   Change your account password.
                 </p>
@@ -371,6 +384,37 @@ const Profile = () => {
                 {changingPassword ? "Changing..." : "Change Password"}
               </button>
             </form>
+          </div>
+        </section>
+
+        <section className="bg-white border border-slate-200 rounded-[2rem] p-7 shadow-sm">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div className="flex items-start gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <Building2 size={27} />
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-black text-slate-950">
+                  Company Settings
+                </h2>
+
+                <p className="text-slate-500 mt-2 max-w-2xl">
+                  Add your business name, contact details, address, tax number,
+                  and currency. These details will be used for invoice and
+                  quotation PDF branding.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => navigate("/company-settings")}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 hover:bg-slate-800 text-white px-6 py-4 font-black transition"
+            >
+              Open Company Settings
+              <ArrowRight size={18} />
+            </button>
           </div>
         </section>
       </div>
